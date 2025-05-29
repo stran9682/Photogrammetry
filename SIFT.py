@@ -67,50 +67,71 @@ def createDifferenceOfGaussians (octave):
         DoG = cv2.subtract(octave[i], octave[i-1])
         DoGs.append(DoG)
 
-        cv2.imshow("image", DoG)
-        cv2.waitKey(0)
-        cv2.destroyAllWindow
+    return DoGs
 
-def detectLocalExtrema (DoG_Images):
+def getLocalExtrema (DoG_Octave):
 
-    for i in range (1, len(DoG_Images) -1):
-        dog_prev = DoG_Images[i - 1]
-        dog_curr = DoG_Images[i]
-        dog_next = DoG_Images[i + 1]
+    octave_extrema = list()
 
-        # TODO loop through pixels of current and provide location to check neighbros
+    for i in range (1, len(DoG_Octave) -1):
 
-        checkNeighbors(dog_prev, dog_curr, dog_next)
+        dog_prev = DoG_Octave[i - 1]
+        dog_curr = DoG_Octave[i]
+        dog_next = DoG_Octave[i + 1]
+
+        octave_extrema.append(findExtrema (dog_prev, dog_curr, dog_next))
+
+    return octave_extrema
+
+def findExtrema (DoG_prev, DoG_curr, DoG_next):
+
+    extremas = list()
+
+    for row in range(1, DoG_curr.shape[0]-1):
+
+        for col in range (1, DoG_curr.shape[1]-1):
+
+            location = (row, col)
+
+            possibleExtrema = checkNeighbors (DoG_prev, DoG_curr, DoG_next, location)
+            
+            if possibleExtrema:
+                extremas.append(possibleExtrema)
+
+    print("Done image, found " + str(len(extremas)) + " extrema")
+
+    return extremas
 
 def checkNeighbors (DoG_prev, DoG_curr, DoG_next, location) : 
 
-    pixels = list()
+    x = location[1]
+    y = location[0]
 
-    for row in range (-1, 2):
-        for col in range (-1, 2):
-            pixels.append(DoG_prev[location[0] + row][location[1] + col])
-            pixels.append(DoG_curr[location[0] + row][location[1] + col])
-            pixels.append(DoG_next[location[0] + row][location[1] + col])
+    patch_prev = DoG_prev[y-1:y+2, x-1:x+2]
+    patch_curr = DoG_curr[y-1:y+2, x-1:x+2]
+    patch_next = DoG_next[y-1:y+2, x-1:x+2]
 
-    center = pixels.pop(13)
+    neighbors = np.concatenate([
+        patch_prev.flatten(),
+        patch_curr.flatten(),
+        patch_next.flatten()
+    ])
 
-    if center == min(pixels) or center == max(pixels):
-        return True
+    center = neighbors[13]
+
+    neighbors = np.delete(neighbors, 13)
+
+    if center < np.min(neighbors) or center > np.max(neighbors):
+        return center
     
-    return False
+    return None
 
-image = cv2.imread("kitty.png")
+image = cv2.imread("kitty.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
 octaves = generateOctaves(image)
 
 for octave in octaves:
-    createDifferenceOfGaussians(octave)
+    DoGS = createDifferenceOfGaussians(octave)
 
+    print("new level!")
 
-
-
-
-    
-
-
-    
-
+    extrema = getLocalExtrema (DoGS)
