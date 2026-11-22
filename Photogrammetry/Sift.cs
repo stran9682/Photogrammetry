@@ -7,8 +7,8 @@ namespace Photogrammetry;
 public static class Sift
 {
 	/// <summary>
-	/// From an initial image, create a scale space over one octave.
-	/// Each image after is blurred by a factor of K=2<sup>1/S</sup>
+	///     From an initial image, create a scale space over one octave.
+	///     Each image after is blurred by a factor of K=2<sup>1/S</sup>
 	/// </summary>
 	/// <param name="initialImage">The base image, or bottom of the octave. Will be referenced in the returned list</param>
 	/// <param name="s">Number of searchable images in the octave, defaults to 3</param>
@@ -49,9 +49,7 @@ public static class Sift
 					var currentRow = currentAccessor.GetRowSpan(row);
 
 					for (var col = 0; col < prevRow.Length; col++)
-					{
 						dog[row, col] = currentRow[col].PackedValue - prevRow[col].PackedValue;
-					}
 				}
 			});
 
@@ -62,30 +60,29 @@ public static class Sift
 	}
 
 	/// <summary>
-	/// Search for local scale space extrema.
-	/// Potential features will be smaller or larger than all their surrounding neighbors.
+	///     Search for local scale space extrema.
+	///     Potential features will either be smaller or larger than all their surrounding neighbors.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
-	public static void DetectLocalExtrema(List<float[,]> dogOctave)
+	/// <returns>Locations of potential keypoints, stored as [row, col, layer]</returns>
+	public static List<int[]> DetectLocalExtrema(List<float[,]> dogOctave)
 	{
-		for (var i = 1; i < dogOctave.Count - 1; i++)
+		var result = new List<int[]>();
+
+		for (var layer = 1; layer < dogOctave.Count - 1; layer++)
 		{
-			var currentImage = dogOctave[i];
+			var currentImage = dogOctave[layer];
 
 			for (var row = 1; row < currentImage.GetLength(0) - 1; row++)
-			{
-				for (var col = 1; col < currentImage.GetLength(1) - 1; col++)
-				{
-					if (IsExtrema(dogOctave, i, row, col))
-					{
-						// TODO: record the local extrema
-					}
-				}
-			}
+			for (var col = 1; col < currentImage.GetLength(1) - 1; col++)
+				if (IsExtrema(dogOctave, row, col, layer))
+					result.Add([row, col, layer]);
 		}
+
+		return result;
 	}
 
-	private static bool IsExtrema(List<float[,]> dogOctave, int layer, int row, int col)
+	private static bool IsExtrema(List<float[,]> dogOctave, int row, int col, int layer)
 	{
 		var center = dogOctave[layer][row, col];
 		bool isMax = true, isMin = true;
@@ -95,20 +92,72 @@ public static class Sift
 			var image = dogOctave[layer + dl];
 
 			for (var dr = -1; dr <= 1; dr++)
+			for (var dc = -1; dc <= 1; dc++)
 			{
-				for (var dc = -1; dc <= 1; dc++)
-				{
-					if (dl == 0 && dr == 0 && dc == 0) continue;
+				if (dl == 0 && dr == 0 && dc == 0) continue;
 
-					var val = image[row + dr, col + dc];
-					if (val >= center) isMax = false;
-					if (val <= center) isMin = false;
+				var val = image[row + dr, col + dc];
+				if (val >= center) isMax = false;
+				if (val <= center) isMin = false;
 
-					if (!isMax && !isMin) return false;
-				}
+				if (!isMax && !isMin) return false;
 			}
 		}
 
 		return isMax || isMin;
+	}
+
+	public static void LocalizeKeypoints(List<float[,]> dogOctave, List<int[]> extremaCoordinates)
+	{
+		// will also localize the extrema
+		extremaCoordinates.RemoveAll(c => !LocalizeExtremum(dogOctave, c));
+	}
+	
+	private static bool LocalizeExtremum(List<float[,]> dogOctave, int[] coordinate)
+	{
+		var coordinateWithOffset = (int[])coordinate.Clone();
+		double[]? gradient = null;
+		double[]? offset = null;
+		var converged = false;
+
+		for (var attempt = 0; attempt < 5; attempt++)
+		{
+			if (!Utils.IsWithinBounds(dogOctave, coordinateWithOffset)) return false;
+
+			var hessian = Utils.ApproximateHessian(dogOctave, coordinateWithOffset);
+			gradient = Utils.ApproximateGradient(dogOctave, coordinateWithOffset);
+			offset = Utils.CalculateOffset(hessian, gradient);
+
+			if (offset == null) return false;
+
+			// If offset is <= 0.5 in all dimensions, extremum lies within this sample pixel cube
+			if (Math.Abs(offset[0]) <= 0.5 && Math.Abs(offset[1]) <= 0.5 && Math.Abs(offset[2]) <= 0.5)
+			{
+				converged = true;
+				break;
+			}
+
+			coordinateWithOffset[0] += (int)Math.Round(offset[0]);
+			coordinateWithOffset[1] += (int)Math.Round(offset[1]);
+			coordinateWithOffset[2] += (int)Math.Round(offset[2]);
+		}
+
+		if (!converged || offset == null || gradient == null) return false;
+
+		coordinate[0] = coordinateWithOffset[0];
+		coordinate[1] = coordinateWithOffset[1];
+		coordinate[2] = coordinateWithOffset[2];
+
+		var row = coordinateWithOffset[0];
+		var col = coordinateWithOffset[1];
+		var layer = coordinateWithOffset[2];
+
+		// Value at extremum: D(x̂) = D + 0.5 * (g · x̂)
+		var contrast = dogOctave[layer][row, col] * Utils.ImageScale + 0.5 * (
+			gradient[1] * offset[0] +
+			gradient[0] * offset[1] +
+			gradient[2] * offset[2]);
+
+		return Math.Abs(contrast) >= 0.03;
 	}
 }
