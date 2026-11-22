@@ -107,24 +107,41 @@ public static class Sift
 		return isMax || isMin;
 	}
 
+	/// <summary>
+	///     Localizes potential keypoints by fitting to the nearby data in scale and location.
+	///     Then using that information,
+	///     determines if a point should be removed for low contrast or poor edge localization.
+	/// </summary>
+	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
+	/// <param name="extremaCoordinates">Location of potential keypoints, stored as (layer, row, col)</param>
 	public static void LocalizeKeypoints(List<float[,]> dogOctave, List<int[]> extremaCoordinates)
 	{
 		// will also localize the extrema
 		extremaCoordinates.RemoveAll(c => !LocalizeExtremum(dogOctave, c));
 	}
-	
-	private static bool LocalizeExtremum(List<float[,]> dogOctave, int[] coordinate)
+
+	/// <summary>
+	///     Localizes a potential keypoint by fitting to the nearby data in scale and location.
+	///     Then using that information,
+	///     determines if a point should be rejected for low contrast or poor edge localization.
+	/// </summary>
+	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
+	/// <param name="coordinate">Location of the potential keypoint stored as (layer, row, col)</param>
+	/// <param name="r"></param>
+	/// <returns>true if this keypoint should be kept, false otherwise.</returns>
+	private static bool LocalizeExtremum(List<float[,]> dogOctave, int[] coordinate, int r = 10)
 	{
 		var coordinateWithOffset = (int[])coordinate.Clone();
-		double[]? gradient = null;
-		double[]? offset = null;
+		double[] gradient = null!;
+		double[,] hessian = null!;
+		double[]? offset = null!;
 		var converged = false;
 
 		for (var attempt = 0; attempt < 5; attempt++)
 		{
 			if (!Utils.IsWithinBounds(dogOctave, coordinateWithOffset)) return false;
 
-			var hessian = Utils.ApproximateHessian(dogOctave, coordinateWithOffset);
+			hessian = Utils.ApproximateHessian(dogOctave, coordinateWithOffset);
 			gradient = Utils.ApproximateGradient(dogOctave, coordinateWithOffset);
 			offset = Utils.CalculateOffset(hessian, gradient);
 
@@ -142,7 +159,7 @@ public static class Sift
 			coordinateWithOffset[2] += (int)Math.Round(offset[2]);
 		}
 
-		if (!converged || offset == null || gradient == null) return false;
+		if (!converged) return false;
 
 		coordinate[0] = coordinateWithOffset[0];
 		coordinate[1] = coordinateWithOffset[1];
@@ -152,12 +169,21 @@ public static class Sift
 		var col = coordinateWithOffset[1];
 		var layer = coordinateWithOffset[2];
 
-		// Value at extremum: D(x̂) = D + 0.5 * (g · x̂)
+		// remove low contrast points
 		var contrast = dogOctave[layer][row, col] * Utils.ImageScale + 0.5 * (
 			gradient[1] * offset[0] +
 			gradient[0] * offset[1] +
 			gradient[2] * offset[2]);
 
-		return Math.Abs(contrast) >= 0.03;
+		if (Math.Abs(contrast) < 0.03) return false;
+
+		// Eliminating edge responses
+		var detH = hessian[0, 0] * hessian[1, 1] - Math.Pow(hessian[0, 1], 2);
+
+		if (detH < 0) return false;
+
+		var traceH = hessian[0, 0] * hessian[1, 1];
+
+		return Math.Pow(traceH, 2) / detH < Math.Pow(r + 1, 2) / r;
 	}
 }

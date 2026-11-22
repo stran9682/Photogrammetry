@@ -24,3 +24,5 @@ var diffOfGaussians = Sift.CreateDoGOctave(scaleSpace);
 // search for local scale space extrema.
 // Potential features will either be smaller or larger than their all surrounding neighbors
 var potentialKeypoints = Sift.DetectLocalExtrema(diffOfGaussians);
+
+Sift.LocalizeKeypoints(diffOfGaussians, potentialKeypoints);
