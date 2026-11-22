@@ -35,7 +35,7 @@ public static class Sift
 	public static List<float[,]> CreateDoGOctave(List<Image<L8>> scaleSpace)
 	{
 		var diffOfGaussians = new List<float[,]>();
-		for (var i = 1; i < 6; i++)
+		for (var i = 1; i < scaleSpace.Count; i++)
 		{
 			var prevImage = scaleSpace[i - 1];
 			var currentImage = scaleSpace[i];
@@ -61,7 +61,7 @@ public static class Sift
 
 	/// <summary>
 	///     Search for local scale space extrema.
-	///     Potential features will either be smaller or larger than all their surrounding neighbors.
+	///     Potential features will either be smaller or larger than all 26 surrounding neighbors.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
 	/// <returns>Locations of potential keypoints, stored as [row, col, layer]</returns>
@@ -113,7 +113,8 @@ public static class Sift
 	///     determines if a point should be removed for low contrast or poor edge localization.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
-	/// <param name="extremaCoordinates">Location of potential keypoints, stored as (layer, row, col)</param>
+	/// <param name="extremaCoordinates">Location of potential keypoints, stored as (row, col, layer)</param>
+	/// <remarks>Will modify extremaCoordinates in place</remarks>
 	public static void LocalizeKeypoints(List<float[,]> dogOctave, List<int[]> extremaCoordinates)
 	{
 		// will also localize the extrema
@@ -126,7 +127,7 @@ public static class Sift
 	///     determines if a point should be rejected for low contrast or poor edge localization.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
-	/// <param name="coordinate">Location of the potential keypoint stored as (layer, row, col)</param>
+	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
 	/// <param name="r"></param>
 	/// <returns>true if this keypoint should be kept, false otherwise.</returns>
 	private static bool LocalizeExtremum(List<float[,]> dogOctave, int[] coordinate, int r = 10)
@@ -182,7 +183,7 @@ public static class Sift
 
 		if (detH < 0) return false;
 
-		var traceH = hessian[0, 0] * hessian[1, 1];
+		var traceH = hessian[0, 0] + hessian[1, 1];
 
 		return Math.Pow(traceH, 2) / detH < Math.Pow(r + 1, 2) / r;
 	}
