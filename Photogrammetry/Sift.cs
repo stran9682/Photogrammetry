@@ -196,7 +196,7 @@ public static class Sift
 	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
 	/// <param name="gaussianImage">The gaussian blurred image with the same scale as the keypoint</param>
 	/// <returns></returns>
-	private static List<Keypoint> AssignOrientation(int[] coordinate, Image<L8> gaussianImage)
+	public static List<Keypoint> AssignOrientation(int[] coordinate, Image<L8> gaussianImage)
 	{
 		var scale = 1.5 * coordinate[2];
 		var radius = (int)Math.Round(3 * scale);
