@@ -1,3 +1,5 @@
+using PhotogrammetryLibrary;
+
 namespace Photogrammetry.Tests;
 
 public class UtilsTests
@@ -16,7 +18,7 @@ public class UtilsTests
 	public void IsWithinBounds_ValidatesBoundaryCorrectly(int row, int col, int layer, bool expected)
 	{
 		var dogOctave = TestHelpers.CreateDogOctave();
-		var coordinate = new[] { row, col, layer };
+		var coordinate = new Coordinate(layer, row, col);
 
 		var result = Utils.IsWithinBounds(dogOctave, coordinate);
 
@@ -27,7 +29,7 @@ public class UtilsTests
 	public void ApproximateGradient_UniformOctave_ReturnsZeroGradient()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(5, 10, 10, 42f);
-		var coordinate = new[] { 5, 5, 2 };
+		var coordinate = new Coordinate(2, 5, 5);
 
 		var gradient = Utils.ApproximateGradient(dogOctave, coordinate);
 
@@ -47,8 +49,8 @@ public class UtilsTests
 		for (var r = 0; r < 10; r++)
 		for (var c = 0; c < 10; c++)
 			dogOctave[l][r, c] = 2f * c + 4f * r + 8f * l;
-
-		var coordinate = new[] { 4, 4, 2 };
+		
+		var coordinate = new Coordinate(2, 4, 4);
 		var gradient = Utils.ApproximateGradient(dogOctave, coordinate);
 
 		// dx = ImageScale * 0.5 * (f(c+1) - f(c-1)) = ImageScale * 0.5 * (2*2) = 2 * ImageScale
@@ -67,7 +69,7 @@ public class UtilsTests
 	public void ApproximateHessian_ConstantOctave_ReturnsZeroHessian()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(5, 10, 10, 15f);
-		var coordinate = new[] { 3, 3, 2 };
+		var coordinate = new Coordinate(2, 3, 3);
 
 		var hessian = Utils.ApproximateHessian(dogOctave, coordinate);
 
@@ -85,8 +87,8 @@ public class UtilsTests
 		for (var r = 0; r < 10; r++)
 		for (var c = 0; c < 10; c++)
 			dogOctave[l][r, c] = (float)Math.Sin(l + 1) * 10f + r * c;
-
-		var coordinate = new[] { 4, 4, 2 };
+		
+		var coordinate = new Coordinate(2, 4, 4);
 		var hessian = Utils.ApproximateHessian(dogOctave, coordinate);
 
 		Assert.Equal(hessian[0, 1], hessian[1, 0], 6);
@@ -105,7 +107,7 @@ public class UtilsTests
 		for (var c = 0; c < 10; c++)
 			dogOctave[l][r, c] = 3f * c * c + 5f * r * r + 7f * l * l + 2f * c * r;
 
-		var coordinate = new[] { 4, 4, 2 };
+		var coordinate = new Coordinate(2, 4, 4);
 		var hessian = Utils.ApproximateHessian(dogOctave, coordinate);
 
 		// dxx = ImageScale * (3*(c+1)^2 - 6*c^2 + 3*(c-1)^2) = ImageScale * 6

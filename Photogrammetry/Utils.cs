@@ -1,25 +1,27 @@
+using PhotogrammetryLibrary;
+
 namespace Photogrammetry;
 
 public static class Utils
 {
 	/// <summary>
-	/// The SIFT paper assumes pixel values in range [0,1].
-	/// To bring L8 images to scale matching the paper, multiply by 1/255.
+	///     The SIFT paper assumes pixel values in range [0,1].
+	///     To bring L8 images to scale matching the paper, multiply by 1/255.
 	/// </summary>
 	public const double ImageScale = 1.0 / 255.0;
 
 	/// <summary>
-	/// Uses a second order taylor series to approximate the gradient at a point.
+	///     Uses a second order taylor series to approximate the gradient at a point.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
 	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
 	/// <returns>The gradient as [dx, dy, ds]</returns>
 	/// <remarks>The order of the gradient is different from the coordinate.</remarks>
-	public static double[] ApproximateGradient(List<float[,]> dogOctave, int[] coordinate)
+	public static double[] ApproximateGradient(List<float[,]> dogOctave, Coordinate coordinate)
 	{
-		var row = coordinate[0];
-		var col = coordinate[1];
-		var layer = coordinate[2];
+		var row = coordinate.Row;
+		var col = coordinate.Column;
+		var layer = coordinate.Layer;
 
 		var dx = ImageScale * 0.5 * (dogOctave[layer][row, col + 1] - dogOctave[layer][row, col - 1]);
 		var dy = ImageScale * 0.5 * (dogOctave[layer][row + 1, col] - dogOctave[layer][row - 1, col]);
@@ -28,11 +30,11 @@ public static class Utils
 		return [dx, dy, ds];
 	}
 
-	public static double[,] ApproximateHessian(List<float[,]> dogOctave, int[] coordinate)
+	public static double[,] ApproximateHessian(List<float[,]> dogOctave, Coordinate coordinate)
 	{
-		var row = coordinate[0];
-		var col = coordinate[1];
-		var layer = coordinate[2];
+		var row = coordinate.Row;
+		var col = coordinate.Column;
+		var layer = coordinate.Layer;
 
 		var center = dogOctave[layer][row, col];
 		var dxx = ImageScale * (dogOctave[layer][row, col + 1] - 2 * center + dogOctave[layer][row, col - 1]);
@@ -60,12 +62,12 @@ public static class Utils
 	}
 
 	/// <summary>
-	/// Calculates the offset of a sample point from the estimated location of the extremum using Cramer's Method.
-	/// Solves equation 3 in the SIFT paper.
+	///     Calculates the offset of a sample point from the estimated location of the extremum using Cramer's Method.
+	///     Solves equation 3 in the SIFT paper.
 	/// </summary>
 	/// <param name="hessian">The approximated hessian at the point</param>
 	/// <param name="gradient">The approximated gradient at the point</param>
-	/// <returns></returns>
+	/// <returns> Returns [rowOffset, colOffset, scaleOffset] </returns>
 	public static double[]? CalculateOffset(double[,] hessian, double[] gradient)
 	{
 		var hessianDet =
@@ -91,15 +93,14 @@ public static class Utils
 			gradient[0] * (hessian[1, 0] * hessian[2, 1] - hessian[1, 1] * hessian[2, 0]);
 
 		// SIFT Taylor series extremum is x̂ = -H⁻¹g
-		// Returns [rowOffset, colOffset, scaleOffset] to match [row, col, layer] coordinate ordering
 		return [-yDet / hessianDet, -xDet / hessianDet, -sDet / hessianDet];
 	}
 
-	public static bool IsWithinBounds(List<float[,]> dogOctave, int[] coordinate)
+	public static bool IsWithinBounds(List<float[,]> dogOctave, Coordinate coordinate)
 	{
-		var row = coordinate[0];
-		var col = coordinate[1];
-		var layer = coordinate[2];
+		var row = coordinate.Row;
+		var col = coordinate.Column;
+		var layer = coordinate.Layer;
 
 		if (layer < 1 || layer >= dogOctave.Count - 1) return false;
 

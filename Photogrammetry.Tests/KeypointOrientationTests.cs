@@ -1,8 +1,6 @@
-using Photogrammetry;
 using PhotogrammetryLibrary;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using Xunit;
 
 namespace Photogrammetry.Tests;
 
@@ -14,7 +12,8 @@ public class KeypointOrientationTests
 		return diff > 180.0 ? 360.0 - diff : diff;
 	}
 
-	private static Image<L8> CreateRampImage(int width, int height, double angleDegrees, double centerCol, double centerRow)
+	private static Image<L8> CreateRampImage(int width, int height, double angleDegrees, double centerCol,
+		double centerRow)
 	{
 		var angleRad = angleDegrees * Math.PI / 180.0;
 		var cosA = Math.Cos(angleRad);
@@ -42,8 +41,8 @@ public class KeypointOrientationTests
 	public void AssignOrientation_HorizontalGradientEast_AssignsZeroOr360Degrees()
 	{
 		// Brightness increases strictly from left to right (dx > 0, dy = 0)
-		using var image = CreateRampImage(width: 40, height: 40, angleDegrees: 0, centerCol: 20, centerRow: 20);
-		var coordinate = new[] { 20, 20, 2 }; // [row, col, layer]
+		using var image = CreateRampImage(40, 40, 0, 20, 20);
+		var coordinate = new Coordinate(2, 20, 20);
 
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
@@ -57,8 +56,8 @@ public class KeypointOrientationTests
 	public void AssignOrientation_HorizontalGradientWest_Assigns180Degrees()
 	{
 		// Brightness increases strictly from right to left (dx < 0, dy = 0)
-		using var image = CreateRampImage(width: 40, height: 40, angleDegrees: 180, centerCol: 20, centerRow: 20);
-		var coordinate = new[] { 20, 20, 2 };
+		using var image = CreateRampImage(40, 40, 180, 20, 20);
+		var coordinate = new Coordinate(2, 20, 20);
 
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
@@ -73,8 +72,8 @@ public class KeypointOrientationTests
 	{
 		// Brightness increases strictly downwards (dx = 0, dy > 0 in screen space)
 		// 360 - 90 = 270 degrees in counter-clockwise Cartesian convention
-		using var image = CreateRampImage(width: 40, height: 40, angleDegrees: 90, centerCol: 20, centerRow: 20);
-		var coordinate = new[] { 20, 20, 2 };
+		using var image = CreateRampImage(40, 40, 90, 20, 20);
+		var coordinate = new Coordinate(2, 20, 20);
 
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
@@ -89,8 +88,8 @@ public class KeypointOrientationTests
 	{
 		// Brightness increases strictly upwards (dx = 0, dy < 0 in screen space)
 		// 360 - 270 = 90 degrees
-		using var image = CreateRampImage(width: 40, height: 40, angleDegrees: 270, centerCol: 20, centerRow: 20);
-		var coordinate = new[] { 20, 20, 2 };
+		using var image = CreateRampImage(40, 40, 270, 20, 20);
+		var coordinate = new Coordinate(2, 20, 20);
 
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
@@ -107,8 +106,8 @@ public class KeypointOrientationTests
 	[InlineData(215.0)]
 	public void AssignOrientation_ArbitraryGradientAngles_InterpolatesAccurately(double screenAngleDegrees)
 	{
-		using var image = CreateRampImage(width: 50, height: 50, angleDegrees: screenAngleDegrees, centerCol: 25, centerRow: 25);
-		var coordinate = new[] { 25, 25, 2 };
+		using var image = CreateRampImage(50, 50, screenAngleDegrees, 25, 25);
+		var coordinate = new Coordinate(2, 20, 20);
 
 		var expectedCartesian = (360.0 - screenAngleDegrees) % 360.0;
 		var keypoints = Sift.AssignOrientation(coordinate, image);
@@ -133,7 +132,7 @@ public class KeypointOrientationTests
 			}
 		});
 
-		var coordinate = new[] { 15, 15, 2 };
+		var coordinate = new Coordinate(2, 15, 15);
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
 		Assert.Single(keypoints);
@@ -155,7 +154,6 @@ public class KeypointOrientationTests
 			{
 				var span = accessor.GetRowSpan(r);
 				for (var c = 0; c < span.Length; c++)
-				{
 					if (c < 25)
 					{
 						// Horizontal ramp
@@ -168,15 +166,15 @@ public class KeypointOrientationTests
 						var val = Math.Clamp(128.0 + 3.0 * (r - 25), 0.0, 255.0);
 						span[c] = new L8((byte)val);
 					}
-				}
 			}
 		});
 
-		var coordinate = new[] { 25, 25, 2 };
+		var coordinate = new Coordinate(2, 25, 25);
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
 		// A bimodal distribution with two distinct prominent peaks creates multiple keypoints at the same coordinate
-		Assert.True(keypoints.Count >= 2, $"Expected at least 2 keypoints for bimodal distribution, but got {keypoints.Count}");
+		Assert.True(keypoints.Count >= 2,
+			$"Expected at least 2 keypoints for bimodal distribution, but got {keypoints.Count}");
 
 		// All keypoints must share the same (X, Y, S) location
 		Assert.All(keypoints, kp =>
@@ -195,8 +193,8 @@ public class KeypointOrientationTests
 	public void AssignOrientation_BoundaryKeypoint_DoesNotThrowAndAssignsValidOrientation()
 	{
 		// Keypoint near the top-left boundary where window clips against image boundaries
-		using var image = CreateRampImage(width: 30, height: 30, angleDegrees: 0, centerCol: 3, centerRow: 3);
-		var coordinate = new[] { 3, 3, 2 };
+		using var image = CreateRampImage(30, 30, 0, 3, 3);
+		var coordinate = new Coordinate(2, 3, 3);
 
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
@@ -245,7 +243,7 @@ public class KeypointOrientationTests
 			}
 		});
 
-		var coordinate = new[] { centerRow, centerCol, 2 };
+		var coordinate = new Coordinate(2, centerRow, centerCol);
 		var keypoints = Sift.AssignOrientation(coordinate, image);
 
 		Assert.NotEmpty(keypoints);

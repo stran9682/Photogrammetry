@@ -65,10 +65,10 @@ public static class Sift
 	///     Potential features will either be smaller or larger than all 26 surrounding neighbors.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
-	/// <returns>Locations of potential keypoints, stored as [row, col, layer]</returns>
-	public static List<int[]> DetectLocalExtrema(List<float[,]> dogOctave)
+	/// <returns>Locations of potential keypoints</returns>
+	public static List<Coordinate> DetectLocalExtrema(List<float[,]> dogOctave)
 	{
-		var result = new List<int[]>();
+		var result = new List<Coordinate>();
 
 		for (var layer = 1; layer < dogOctave.Count - 1; layer++)
 		{
@@ -77,7 +77,7 @@ public static class Sift
 			for (var row = 1; row < currentImage.GetLength(0) - 1; row++)
 			for (var col = 1; col < currentImage.GetLength(1) - 1; col++)
 				if (IsExtrema(dogOctave, row, col, layer))
-					result.Add([row, col, layer]);
+					result.Add(new Coordinate(layer, row, col));
 		}
 
 		return result;
@@ -111,18 +111,21 @@ public static class Sift
 	/// <summary>
 	///     Localizes and calculates the orientation of a keypoint
 	/// </summary>
-	/// <param name="extremaCoordinates">Location of potential keypoints, stored as (row, col, layer)</param>
+	/// <param name="extremaCoordinates">Location of potential keypoints</param>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
 	/// <param name="gaussians"></param>
-	/// <returns>List of stable keypoints</returns>
-	public static List<Keypoint> LocalizeAndOrientKeypoints(List<int[]> extremaCoordinates, List<float[,]> dogOctave,
-		List<Image<L8>> gaussians)
+	/// <returns>List of stable oriented keypoints</returns>
+	public static List<Keypoint> LocalizeAndOrientKeypoints(
+		List<Coordinate> extremaCoordinates,
+		List<float[,]> dogOctave,
+		List<Image<L8>> gaussians
+	)
 	{
 		List<Keypoint> keypoints = [];
 
 		foreach (var localizedCoordinate in extremaCoordinates
-			         .Select(coordinate => LocalizeExtremum(dogOctave, coordinate)).OfType<int[]>())
-			keypoints.AddRange(AssignOrientation(localizedCoordinate, gaussians[localizedCoordinate[2]]));
+			         .Select(coordinate => LocalizeExtremum(dogOctave, coordinate)).OfType<Coordinate>().ToList())
+			keypoints.AddRange(AssignOrientation(localizedCoordinate, gaussians[localizedCoordinate.Layer]));
 
 		return keypoints;
 	}
@@ -133,12 +136,12 @@ public static class Sift
 	///     for low contrast or poor edge localization.
 	/// </summary>
 	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
-	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
+	/// <param name="coordinate">Location of the potential keypoint</param>
 	/// <param name="r"></param>
-	/// <returns>The localized keypoint stored as (row, col, layer), null if the keypoint isn't stable</returns>
-	private static int[]? LocalizeExtremum(List<float[,]> dogOctave, int[] coordinate, int r = 10)
+	/// <returns>The localized keypoint, null if the keypoint isn't stable</returns>
+	private static Coordinate? LocalizeExtremum(List<float[,]> dogOctave, Coordinate coordinate, int r = 10)
 	{
-		var coordinateWithOffset = (int[])coordinate.Clone();
+		var coordinateWithOffset = coordinate;
 		double[] gradient = null!;
 		double[,] hessian = null!;
 		double[]? offset = null!;
@@ -161,16 +164,19 @@ public static class Sift
 				break;
 			}
 
-			coordinateWithOffset[0] += (int)Math.Round(offset[0]);
-			coordinateWithOffset[1] += (int)Math.Round(offset[1]);
-			coordinateWithOffset[2] += (int)Math.Round(offset[2]);
+		
+			coordinateWithOffset = new Coordinate(
+				coordinateWithOffset.Layer + (int)Math.Round(offset[2]),
+				coordinateWithOffset.Row + (int)Math.Round(offset[0]),
+				coordinateWithOffset.Column + (int)Math.Round(offset[1])
+			);
 		}
 
 		if (!converged) return null;
 
-		var row = coordinateWithOffset[0];
-		var col = coordinateWithOffset[1];
-		var layer = coordinateWithOffset[2];
+		var row = coordinateWithOffset.Row;
+		var col = coordinateWithOffset.Column;
+		var layer = coordinateWithOffset.Layer;
 
 		// remove low contrast points
 		var contrast = dogOctave[layer][row, col] * Utils.ImageScale + 0.5 * (
@@ -195,24 +201,24 @@ public static class Sift
 	/// </summary>
 	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
 	/// <param name="gaussianImage">The gaussian blurred image with the same scale as the keypoint</param>
-	/// <returns></returns>
-	public static List<Keypoint> AssignOrientation(int[] coordinate, Image<L8> gaussianImage)
+	/// <returns>Keypoints with orientation</returns>
+	public static List<Keypoint> AssignOrientation(Coordinate coordinate, Image<L8> gaussianImage)
 	{
-		var scale = 1.5 * coordinate[2];
-		var radius = (int)Math.Round(3 * scale);
+		var scale = 1.5 * coordinate.Layer;
+		var radius = (int)Math.Round(3 * scale); // 3 𝛔 away, anything further is close to 0
 		const int bins = 36;
 		var histogram = new double[bins];
 		List<Keypoint> keypoints = [];
 
 		for (var dr = -radius; dr <= radius; dr++)
 		{
-			var row = coordinate[0] + dr;
+			var row = coordinate.Row + dr;
 
 			if (row < 1 || row >= gaussianImage.Height - 1) continue;
 
 			for (var dc = -radius; dc <= radius; dc++)
 			{
-				var col = coordinate[1] + dc;
+				var col = coordinate.Column + dc;
 
 				if (col < 1 || col >= gaussianImage.Width - 1) continue;
 
@@ -236,7 +242,7 @@ public static class Sift
 		var orientationMax = histogram.Max();
 		if (orientationMax <= 0)
 		{
-			keypoints.Add(new Keypoint(coordinate[1], coordinate[0], coordinate[2], 0));
+			keypoints.Add(new Keypoint(coordinate.Column, coordinate.Row, coordinate.Layer, 0));
 			return keypoints;
 		}
 
@@ -256,7 +262,7 @@ public static class Sift
 
 			var orientation = 360.0 - peakBinIndex * 360.0 / bins;
 
-			keypoints.Add(new Keypoint(coordinate[1], coordinate[0], coordinate[2], orientation));
+			keypoints.Add(new Keypoint(coordinate.Column, coordinate.Row, coordinate.Layer, orientation));
 		}
 
 		return keypoints;
