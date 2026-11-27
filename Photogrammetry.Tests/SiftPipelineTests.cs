@@ -1,3 +1,4 @@
+using PhotogrammetryLibrary;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -14,11 +15,11 @@ public class SiftPipelineTests
 		var scaleSpace = Sift.CreateScaleSpace(image);
 		var dogOctave = Sift.CreateDoGOctave(scaleSpace);
 		var extrema = Sift.DetectLocalExtrema(dogOctave);
-		Sift.LocalizeKeypoints(dogOctave, extrema);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, scaleSpace);
 
 		Assert.Equal(6, scaleSpace.Count);
 		Assert.Equal(5, dogOctave.Count);
-		Assert.Empty(extrema);
+		Assert.Empty(keypoints);
 	}
 
 	[Fact]
@@ -52,10 +53,15 @@ public class SiftPipelineTests
 
 		Assert.NotEmpty(candidateExtrema);
 
-		Sift.LocalizeKeypoints(dogOctave, candidateExtrema);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(candidateExtrema, dogOctave, scaleSpace);
 
 		// Verified that the localization executes cleanly and returns valid coordinates
-		foreach (var kp in candidateExtrema) Assert.True(Utils.IsWithinBounds(dogOctave, kp));
+		foreach (var kp in keypoints)
+		{
+			Assert.True(kp.X >= 0 && kp.X < image.Width);
+			Assert.True(kp.Y >= 0 && kp.Y < image.Height);
+			Assert.True(kp.S >= 0 && kp.S < dogOctave.Count);
+		}
 	}
 
 	[Fact]
@@ -77,12 +83,17 @@ public class SiftPipelineTests
 		Assert.NotEmpty(potentialKeypoints);
 
 		var initialCount = potentialKeypoints.Count;
-		Sift.LocalizeKeypoints(dogOctave, potentialKeypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(potentialKeypoints, dogOctave, scaleSpace);
 
 		// Localization filters points based on contrast and edge responses
-		Assert.True(potentialKeypoints.Count <= initialCount);
-		Assert.NotEmpty(potentialKeypoints);
+		Assert.True(keypoints.Count <= initialCount);
+		Assert.NotEmpty(keypoints);
 
-		foreach (var kp in potentialKeypoints) Assert.True(Utils.IsWithinBounds(dogOctave, kp));
+		foreach (var kp in keypoints)
+		{
+			Assert.True(kp.X >= 0 && kp.X < image.Width);
+			Assert.True(kp.Y >= 0 && kp.Y < image.Height);
+			Assert.True(kp.S >= 0 && kp.S < dogOctave.Count);
+		}
 	}
 }

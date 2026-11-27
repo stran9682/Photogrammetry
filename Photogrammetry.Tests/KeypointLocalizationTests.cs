@@ -1,3 +1,4 @@
+using PhotogrammetryLibrary;
 using Xunit;
 
 namespace Photogrammetry.Tests;
@@ -5,23 +6,25 @@ namespace Photogrammetry.Tests;
 public class KeypointLocalizationTests
 {
 	[Fact]
-	public void LocalizeKeypoints_LowContrastExtremum_IsRejected()
+	public void LocalizeAndOrientKeypoints_LowContrastExtremum_IsRejected()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 10, cols: 10, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 10, cols: 10);
 
 		// A very weak peak: center is 1.0f (contrast ~ 1/255 = 0.0039, well below 0.03 threshold)
 		dogOctave[2][5, 5] = 1.0f;
-		var keypoints = new List<int[]> { new[] { 5, 5, 2 } };
+		var extrema = new List<int[]> { new[] { 5, 5, 2 } };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
 		Assert.Empty(keypoints);
 	}
 
 	[Fact]
-	public void LocalizeKeypoints_HighContrastBlob_IsRetained()
+	public void LocalizeAndOrientKeypoints_HighContrastBlob_IsRetained()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 10, cols: 10, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 10, cols: 10);
 
 		// Create a strong, symmetric paraboloid peak centered at [5, 5, 2]:
 		// Peak value 60f (contrast ~ 60/255 = 0.235 > 0.03)
@@ -36,18 +39,24 @@ public class KeypointLocalizationTests
 			dogOctave[l][r, c] = Math.Max(0f, val);
 		}
 
-		var keypoints = new List<int[]> { new[] { 5, 5, 2 } };
+		var extrema = new List<int[]> { new[] { 5, 5, 2 } };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
-		Assert.Single(keypoints);
-		Assert.Equal([5, 5, 2], keypoints[0]);
+		Assert.NotEmpty(keypoints);
+		Assert.All(keypoints, kp =>
+		{
+			Assert.Equal(5, kp.X);
+			Assert.Equal(5, kp.Y);
+			Assert.Equal(2, kp.S);
+		});
 	}
 
 	[Fact]
-	public void LocalizeKeypoints_SingularHessian_IsRejected()
+	public void LocalizeAndOrientKeypoints_SingularHessian_IsRejected()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 10, cols: 10, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 10, cols: 10);
 
 		// A linear ramp has zero second derivatives, causing Hessian to be all zeros (singular)
 		for (var l = 0; l < 5; l++)
@@ -55,18 +64,19 @@ public class KeypointLocalizationTests
 		for (var c = 0; c < 10; c++)
 			dogOctave[l][r, c] = 10f * r + 10f * c;
 
-		var keypoints = new List<int[]> { new[] { 5, 5, 2 } };
+		var extrema = new List<int[]> { new[] { 5, 5, 2 } };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
 		// With singular Hessian, CalculateOffset returns null, rejecting the keypoint
 		Assert.Empty(keypoints);
 	}
 
 	[Fact]
-	public void LocalizeKeypoints_NegativeDeterminant_IsRejected()
+	public void LocalizeAndOrientKeypoints_NegativeDeterminant_IsRejected()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 10, cols: 10, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 10, cols: 10);
 
 		// Saddle-like curvature around center: dxx > 0, dyy < 0 => detH < 0
 		// f(r, c, l) = 50 + 10*(c-5)^2 - 10*(r-5)^2 - 5*(l-2)^2
@@ -80,17 +90,18 @@ public class KeypointLocalizationTests
 			dogOctave[l][r, c] = 50f + 10f * (dc * dc) - 10f * (dr * dr) - 5f * (dl * dl);
 		}
 
-		var keypoints = new List<int[]> { new[] { 5, 5, 2 } };
+		var extrema = new List<int[]> { new[] { 5, 5, 2 } };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
 		Assert.Empty(keypoints);
 	}
 
 	[Fact]
-	public void LocalizeKeypoints_OutOfBoundsShift_IsRejected()
+	public void LocalizeAndOrientKeypoints_OutOfBoundsShift_IsRejected()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 10, cols: 10, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 10, cols: 10);
 
 		// Paraboloid centered at row -2 (outside valid bounds):
 		// This creates a strong directional gradient pulling the coordinate past the row=0 boundary
@@ -106,18 +117,19 @@ public class KeypointLocalizationTests
 		}
 
 		// Initial coordinate at valid interior point [2, 5, 2]
-		var keypoints = new List<int[]> { new[] { 2, 5, 2 } };
+		var extrema = new List<int[]> { new[] { 2, 5, 2 } };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
 		// Coordinate shifts towards negative rows and is discarded when going out of bounds
 		Assert.Empty(keypoints);
 	}
 
 	[Fact]
-	public void LocalizeKeypoints_ModifiesCoordinateInPlaceOnConvergence()
+	public void LocalizeAndOrientKeypoints_ShiftsCoordinateToPeakOnConvergence()
 	{
 		var dogOctave = TestHelpers.CreateDogOctave(layers: 5, rows: 15, cols: 15, fillValue: 0f);
+		var gaussians = TestHelpers.CreateGaussians(count: 6, rows: 15, cols: 15);
 
 		// Peak is at [6, 6, 2], but initial guess is at [5, 5, 2].
 		// Paraboloid centered at (6, 6, 2):
@@ -133,12 +145,18 @@ public class KeypointLocalizationTests
 		}
 
 		var initialCoordinate = new[] { 5, 5, 2 };
-		var keypoints = new List<int[]> { initialCoordinate };
+		var extrema = new List<int[]> { initialCoordinate };
 
-		Sift.LocalizeKeypoints(dogOctave, keypoints);
+		var keypoints = Sift.LocalizeAndOrientKeypoints(extrema, dogOctave, gaussians);
 
-		Assert.Single(keypoints);
-		// LocalizeExtremum should iterate Newton steps and shift coordinate to the true peak at (6, 6, 2)
-		Assert.Equal([6, 6, 2], keypoints[0]);
+		Assert.NotEmpty(keypoints);
+		// LocalizeExtremum should iterate Newton steps and shift coordinate to the true peak at (col 6, row 6, layer 2)
+		Assert.All(keypoints, kp =>
+		{
+			Assert.Equal(6, kp.X);
+			Assert.Equal(6, kp.Y);
+			Assert.Equal(2, kp.S);
+		});
 	}
 }
+

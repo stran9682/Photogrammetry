@@ -1,3 +1,6 @@
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+
 namespace Photogrammetry.Tests;
 
 public static class TestHelpers
@@ -21,4 +24,31 @@ public static class TestHelpers
 		}
 		return octave;
 	}
+
+	/// <summary>
+	/// Creates a list of gaussian images matching the scale space dimensions.
+	/// </summary>
+	public static List<Image<L8>> CreateGaussians(int count = 6, int rows = 10, int cols = 10, byte fillValue = 128)
+	{
+		var list = new List<Image<L8>>(count);
+		for (var i = 0; i < count; i++)
+		{
+			var img = new Image<L8>(cols, rows);
+			if (fillValue != 0)
+			{
+				img.ProcessPixelRows(accessor =>
+				{
+					for (var y = 0; y < accessor.Height; y++)
+					{
+						var row = accessor.GetRowSpan(y);
+						for (var x = 0; x < row.Length; x++)
+							row[x] = new L8(fillValue);
+					}
+				});
+			}
+			list.Add(img);
+		}
+		return list;
+	}
 }
+

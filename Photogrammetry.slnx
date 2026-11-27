@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Photogrammetry/Photogrammetry.csproj" />
   <Project Path="Photogrammetry.Tests/Photogrammetry.Tests.csproj" />
+  <Project Path="PhotogrammetryLibrary/PhotogrammetryLibrary.csproj" />
 </Solution>

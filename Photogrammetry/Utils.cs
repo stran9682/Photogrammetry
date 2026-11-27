@@ -2,8 +2,19 @@ namespace Photogrammetry;
 
 public static class Utils
 {
+	/// <summary>
+	/// The SIFT paper assumes pixel values in range [0,1].
+	/// To bring L8 images to scale matching the paper, multiply by 1/255.
+	/// </summary>
 	public const double ImageScale = 1.0 / 255.0;
 
+	/// <summary>
+	/// Uses a second order taylor series to approximate the gradient at a point.
+	/// </summary>
+	/// <param name="dogOctave">An octave of Difference of Gaussian Images (DoG)</param>
+	/// <param name="coordinate">Location of the potential keypoint stored as (row, col, layer)</param>
+	/// <returns>The gradient as [dx, dy, ds]</returns>
+	/// <remarks>The order of the gradient is different from the coordinate.</remarks>
 	public static double[] ApproximateGradient(List<float[,]> dogOctave, int[] coordinate)
 	{
 		var row = coordinate[0];
@@ -48,6 +59,13 @@ public static class Utils
 		return hessian;
 	}
 
+	/// <summary>
+	/// Calculates the offset of a sample point from the estimated location of the extremum using Cramer's Method.
+	/// Solves equation 3 in the SIFT paper.
+	/// </summary>
+	/// <param name="hessian">The approximated hessian at the point</param>
+	/// <param name="gradient">The approximated gradient at the point</param>
+	/// <returns></returns>
 	public static double[]? CalculateOffset(double[,] hessian, double[] gradient)
 	{
 		var hessianDet =
